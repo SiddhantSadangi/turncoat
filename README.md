@@ -2,6 +2,13 @@
 
 LLM turncoat debate app: two OpenRouter models debate a topic (for/against), with ElevenLabs TTS.
 
+## App structure
+
+- **Home** — Landing page that explains what a turncoat debate is and what this app does.
+- **Debate** — Run a four-speech turncoat debate: pick a topic, two LLMs, two voices; generate speeches one by one (TTS when enabled).
+
+There is no history or persistence; each session is independent.
+
 ## Phase 1 – API clients and test page
 
 You can test the OpenRouter and ElevenLabs integrations from the app.
@@ -19,7 +26,7 @@ You can test the OpenRouter and ElevenLabs integrations from the app.
 2. **API keys** (either):
 
    - Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml` and add your keys, or  
-   - Run the app and enter keys in the "API keys" expander (stored in session only).
+   - Run the app and enter keys in the sidebar (stored in session only).
 
 3. Run the app:
 
