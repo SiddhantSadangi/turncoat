@@ -41,7 +41,7 @@ def text_to_speech(
     voice_id: str,
     text: str,
     *,
-    model_id: str = "eleven_multilingual_v2",
+    model_id: str = "eleven_flash_v2_5",
 ) -> bytes:
     """
     Convert text to speech using ElevenLabs.

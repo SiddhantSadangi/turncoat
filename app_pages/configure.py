@@ -13,7 +13,7 @@ LLM_2_KEY = "llm_2_id"
 VOICE_1_KEY = "voice_1_id"
 VOICE_2_KEY = "voice_2_id"
 ROUND_DURATION_KEY = "round_duration_sec"
-DEFAULT_DURATION_SEC = 45
+DEFAULT_DURATION_SEC = 30
 
 
 def _load_models_and_voices() -> None:
@@ -26,22 +26,23 @@ def _load_models_and_voices() -> None:
             st.session_state["openrouter_models"] = []
     if elevenlabs_key:
         try:
-            st.session_state["elevenlabs_voices"] = elevenlabs_tts.list_voices(
-                elevenlabs_key
-            )
+            st.session_state["elevenlabs_voices"] = elevenlabs_tts.list_voices(elevenlabs_key)
         except Exception:
             st.session_state["elevenlabs_voices"] = []
 
 
 def ensure_models_and_voices_loaded() -> None:
     """
-    Load models/voices and set defaults if API keys are set. No UI.
+    Load models/voices when API keys are set (either or both). No UI.
     Call this before reading topic/llm_1/etc. so defaults are in session_state.
     """
     openrouter_key, elevenlabs_key = auth.get_api_keys()
-    if not openrouter_key or not elevenlabs_key:
+    if not openrouter_key and not elevenlabs_key:
         return
-    if "openrouter_models" not in st.session_state or "elevenlabs_voices" not in st.session_state:
+    need_load = (openrouter_key and "openrouter_models" not in st.session_state) or (
+        elevenlabs_key and "elevenlabs_voices" not in st.session_state
+    )
+    if need_load:
         _load_models_and_voices()
     models = st.session_state.get("openrouter_models", [])
     voices = st.session_state.get("elevenlabs_voices", [])
@@ -69,11 +70,17 @@ def ensure_models_and_voices_loaded() -> None:
 def render_config_form() -> None:
     """Show config UI (info or caption). Call ensure_models_and_voices_loaded() before reading config."""
     openrouter_key, elevenlabs_key = auth.get_api_keys()
-    if not openrouter_key or not elevenlabs_key:
-        st.info("Set OpenRouter and ElevenLabs API keys in the sidebar to continue.")
+    if not openrouter_key:
+        st.info("Set your OpenRouter API key in the sidebar to continue.")
         return
     ensure_models_and_voices_loaded()
-    st.caption("Topic below, duration in sidebar. Choose LLMs and voices below.")
+    if elevenlabs_key:
+        st.caption("Topic below, duration in sidebar. Choose LLMs and voices below.")
+    else:
+        st.caption(
+            "Topic below, duration in sidebar. Choose LLMs below. "
+            "Add your ElevenLabs API key in the sidebar to enable voice selection and audio playback."
+        )
 
 
 def get_model_and_voice_options() -> tuple[list[str], list[str], dict[str, str]]:

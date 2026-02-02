@@ -1,5 +1,5 @@
 """
-Turncoat – LLM turncoat debate app.
+Turncoat — two AI models debate for and against the motion.
 Entrypoint: sidebar (API keys, round duration), navigation (Home, Debate).
 """
 
@@ -10,10 +10,14 @@ from app_pages.configure import DEFAULT_DURATION_SEC, ROUND_DURATION_KEY
 
 
 def main() -> None:
-    st.set_page_config(page_title="Turncoat", page_icon="🔄", layout="centered")
+    st.set_page_config(
+        page_title="Turncoat",
+        page_icon=":material/swap_horiz:",
+        layout="centered",
+    )
 
     with st.sidebar:
-        st.subheader("API keys")
+        st.subheader(":material/key: API keys")
         st.text_input(
             "OpenRouter API key",
             type="password",
@@ -29,7 +33,7 @@ def main() -> None:
             key="elevenlabs_api_key",
         )
         st.divider()
-        st.subheader("Debate")
+        st.subheader(":material/schedule: Debate")
         st.slider(
             "Round duration (sec)",
             min_value=30,

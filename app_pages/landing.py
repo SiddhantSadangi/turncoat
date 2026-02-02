@@ -1,25 +1,29 @@
-"""Landing page: explain turncoat debate and what the app does."""
+"""Landing page: explain turncoat debate and what Turncoat does."""
 
 from __future__ import annotations
 
 import streamlit as st
 
+HERO_IMAGE_URL = "assets/hero.png"
+
 
 def render() -> None:
     st.title("Turncoat")
-    st.caption("LLM debate app")
+    st.subheader("Two models argue both sides of the motion.")
+    st.image(HERO_IMAGE_URL, use_container_width=True, caption="")
+    st.markdown("")
 
     st.markdown("")
-    st.subheader("What is a turncoat debate?")
+    st.subheader(":material/swap_horiz: What is a turncoat debate?")
     st.write(
         "A **turncoat debate** is a format where each debater argues *both* sides of the motion. "
         "A speaker first argues for the motion, then “turns coat” and argues against it (or the other way around). "
         "The format highlights how well each side can make the case for and against a topic."
     )
 
-    st.subheader("What does this app do?")
+    st.subheader(":material/campaign: What does Turncoat do?")
     st.write(
-        "This app runs a **four-speech turncoat debate** between two AI models (via OpenRouter). "
+        "Turncoat runs a **four-speech turncoat debate** between two AI models (via OpenRouter). "
         "You choose a topic (the motion), pick two LLMs and two voices (ElevenLabs). "
         "The debate order is:"
     )
@@ -35,4 +39,4 @@ def render() -> None:
     )
 
     st.markdown("")
-    st.write("Use the **Debate** page in the sidebar to start a debate.")
+    st.markdown("Use the **Debate** page in the sidebar to start a debate in Turncoat.")

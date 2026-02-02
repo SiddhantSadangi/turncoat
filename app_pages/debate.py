@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import concurrent.futures
+
 import streamlit as st
 
 from app_pages.configure import (
@@ -50,34 +52,57 @@ def _speech_cell(
     previous_speeches: list[dict],
 ) -> None:
     st.subheader(label, anchor=False)
-    if speech:
+    has_content = speech and (speech.get("text") or "").strip()
+    if has_content:
         st.caption(speech.get("model_id", ""))
         st.write(speech["text"])
-        # TTS: play button or audio player
+        # TTS: play button or audio player (disabled + popover when no ElevenLabs key)
         audio_cache = st.session_state.get(DEBATE_AUDIO_KEY) or {}
-        if speech["text"] and voice_id and voice_id not in INVALID_PLACEHOLDERS:
-            if elevenlabs_key:
-                if speech_index in audio_cache:
-                    st.audio(audio_cache[speech_index], format="audio/mpeg")
-                else:
-                    if st.button("Play", key=f"play_speech_{speech_index}"):
-                        with st.spinner("Generating audio…"):
-                            try:
-                                audio_bytes = elevenlabs_tts.text_to_speech(
-                                    elevenlabs_key, voice_id, speech["text"]
-                                )
-                                if DEBATE_AUDIO_KEY not in st.session_state:
-                                    st.session_state[DEBATE_AUDIO_KEY] = {}
-                                st.session_state[DEBATE_AUDIO_KEY][speech_index] = audio_bytes
-                                st.rerun()
-                            except Exception as e:
-                                st.error(str(e))
-            else:
-                st.caption("Set ElevenLabs API key in the sidebar to play audio.")
+        if speech_index in audio_cache:
+            st.audio(audio_cache[speech_index], format="audio/mpeg")
+        elif elevenlabs_key and voice_id and voice_id not in INVALID_PLACEHOLDERS:
+            if st.button(
+                "Play",
+                key=f"play_speech_{speech_index}",
+                icon=":material/play_circle:",
+            ):
+                with st.spinner("Generating audio…"):
+                    try:
+                        audio_bytes = elevenlabs_tts.text_to_speech(
+                            elevenlabs_key, voice_id, speech["text"]
+                        )
+                        if DEBATE_AUDIO_KEY not in st.session_state:
+                            st.session_state[DEBATE_AUDIO_KEY] = {}
+                        st.session_state[DEBATE_AUDIO_KEY][speech_index] = audio_bytes
+                        st.rerun()
+                    except Exception as e:
+                        st.error(str(e))
+        else:
+            row = st.columns([3, 1])
+            with row[0]:
+                st.button(
+                    "Play",
+                    key=f"play_speech_{speech_index}",
+                    icon=":material/play_circle:",
+                    disabled=True,
+                )
+            with row[1]:
+                with st.popover(":material/info:", help="Why is Play disabled?"):
+                    st.caption(
+                        "Add your ElevenLabs API key in the sidebar to enable audio playback."
+                    )
     else:
-        st.caption("Not generated yet.")
-        if openrouter_key and can_generate:
-            if st.button("Generate", key=f"gen_speech_{speech_index}"):
+        if speech:
+            st.caption("Previous attempt returned empty. You can retry below.")
+        else:
+            st.caption("Not generated yet.")
+        can_retry = can_generate or (speech is not None)  # allow retry when slot exists but empty
+        if openrouter_key and can_retry:
+            if st.button(
+                "Generate",
+                key=f"gen_speech_{speech_index}",
+                icon=":material/auto_awesome:",
+            ):
                 with st.spinner("Generating…"):
                     try:
                         result = debate_engine.generate_single_speech(
@@ -97,12 +122,12 @@ def _speech_cell(
                         st.error(str(e))
         elif not openrouter_key:
             st.caption("Set OpenRouter API key in the sidebar.")
-        elif not can_generate:
+        elif not can_retry:
             st.caption("Generate the previous speech(s) first.")
 
 
 def render() -> None:
-    st.title("Debate")
+    st.title(":material/campaign: Debate")
 
     st.text_input(
         "Topic",
@@ -153,22 +178,33 @@ def render() -> None:
     voice_2 = st.session_state.get(VOICE_2_KEY)
     duration = st.session_state.get(ROUND_DURATION_KEY, DEFAULT_DURATION_SEC)
 
+    # Voices required only when ElevenLabs key is set (for audio)
+    openrouter_key, elevenlabs_key = auth.get_api_keys()
+    need_voices = bool(elevenlabs_key)
     invalid = (
         not topic
         or not llm_1
         or not llm_2
-        or not voice_1
-        or not voice_2
         or llm_1 in INVALID_PLACEHOLDERS
         or llm_2 in INVALID_PLACEHOLDERS
-        or voice_1 in INVALID_PLACEHOLDERS
-        or voice_2 in INVALID_PLACEHOLDERS
+        or (
+            need_voices
+            and (
+                not voice_1
+                or not voice_2
+                or voice_1 in INVALID_PLACEHOLDERS
+                or voice_2 in INVALID_PLACEHOLDERS
+            )
+        )
     )
 
     if invalid:
-        st.info(
-            "Enter a topic above, set round duration in the sidebar, and choose two LLMs and two voices above."
+        msg = (
+            "Enter a topic above, set round duration in the sidebar, and choose two LLMs above."
+            if not need_voices
+            else "Enter a topic above, set round duration in the sidebar, and choose two LLMs and two voices above."
         )
+        st.info(msg)
         return
 
     st.divider()
@@ -178,16 +214,122 @@ def render() -> None:
         st.session_state[DEBATE_SPEECHES_KEY] = [None] * NUM_SPEECHES
     speeches = st.session_state[DEBATE_SPEECHES_KEY]
 
-    openrouter_key, elevenlabs_key = auth.get_api_keys()
     if not openrouter_key:
         st.warning("Set your OpenRouter API key in the sidebar to generate speeches.")
 
-    # Clear button
-    if any(speeches):
-        if st.button("Clear all speeches"):
-            st.session_state[DEBATE_SPEECHES_KEY] = [None] * NUM_SPEECHES
-            st.session_state.pop(DEBATE_AUDIO_KEY, None)
-            st.rerun()
+    # Row: Generate all speeches | Generate all audio | Clear all speeches
+    audio_cache = st.session_state.get(DEBATE_AUDIO_KEY) or {}
+    all_have_audio = all(i in audio_cache for i in range(NUM_SPEECHES))
+    voices_ok = (
+        voice_1
+        and voice_2
+        and voice_1 not in INVALID_PLACEHOLDERS
+        and voice_2 not in INVALID_PLACEHOLDERS
+    )
+    all_have_speeches = all(speeches)
+    btn_col1, btn_col2, btn_col3 = st.columns(3)
+    with btn_col1:
+        if openrouter_key and not all_have_speeches:
+            if st.button(
+                "Generate all speeches",
+                key="gen_all_speeches",
+                icon=":material/format_quote:",
+            ):
+                progress = st.progress(0.0, text="Generating speeches…")
+                try:
+                    for i in range(NUM_SPEECHES):
+                        ss = st.session_state[DEBATE_SPEECHES_KEY]
+                        if ss[i] is not None:
+                            progress.progress(
+                                (i + 1) / NUM_SPEECHES, text=f"Speech {i + 1} (cached)"
+                            )
+                            continue
+                        prev = [ss[j] for j in range(i) if ss[j]]
+                        progress.progress(
+                            (i + 0.5) / NUM_SPEECHES, text=f"Generating speech {i + 1}…"
+                        )
+                        result = debate_engine.generate_single_speech(
+                            api_key=openrouter_key,
+                            topic=topic,
+                            speech_index=i,
+                            previous_speeches=prev,
+                            llm_1_id=llm_1,
+                            llm_2_id=llm_2,
+                            duration_sec=int(duration),
+                        )
+                        st.session_state[DEBATE_SPEECHES_KEY][i] = result
+                        progress.progress((i + 1) / NUM_SPEECHES, text=f"Speech {i + 1} done")
+                    progress.progress(1.0, text="Done")
+                    st.rerun()
+                except Exception as e:
+                    st.error(str(e))
+    with btn_col2:
+        if all_have_speeches and not all_have_audio:
+            if elevenlabs_key and voices_ok:
+                if st.button(
+                    "Generate all audio",
+                    key="gen_all_audio",
+                    icon=":material/record_voice_over:",
+                ):
+                    if DEBATE_AUDIO_KEY not in st.session_state:
+                        st.session_state[DEBATE_AUDIO_KEY] = {}
+                    progress = st.progress(0.0, text="Generating audio in parallel…")
+                    try:
+                        # Audio has no cross-dependency; generate in parallel
+                        to_gen = [
+                            (i, voice_1 if COL_FOR_INDEX[i] == 0 else voice_2, speeches[i]["text"])
+                            for i in range(NUM_SPEECHES)
+                            if i not in st.session_state[DEBATE_AUDIO_KEY]
+                        ]
+                        if not to_gen:
+                            progress.progress(1.0, text="Done")
+                            st.rerun()
+                        else:
+
+                            def do_tts(item: tuple) -> tuple[int, bytes]:
+                                idx, vid, text = item
+                                return idx, elevenlabs_tts.text_to_speech(elevenlabs_key, vid, text)
+
+                            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                                futures = {
+                                    executor.submit(do_tts, item): item[0] for item in to_gen
+                                }
+                                done = 0
+                                for fut in concurrent.futures.as_completed(futures):
+                                    idx, audio_bytes = fut.result()
+                                    st.session_state[DEBATE_AUDIO_KEY][idx] = audio_bytes
+                                    done += 1
+                                    progress.progress(
+                                        done / len(to_gen), text=f"Generated {done}/{len(to_gen)}"
+                                    )
+                            progress.progress(1.0, text="Done")
+                            st.rerun()
+                    except Exception as e:
+                        st.error(str(e))
+            else:
+                sub_col1, sub_col2 = st.columns([3, 1])
+                with sub_col1:
+                    st.button(
+                        "Generate all audio",
+                        key="gen_all_audio",
+                        icon=":material/record_voice_over:",
+                        disabled=True,
+                    )
+                with sub_col2:
+                    with st.popover(":material/info:", help="Why is this disabled?"):
+                        st.caption(
+                            "Add your ElevenLabs API key in the sidebar to enable audio generation."
+                        )
+    with btn_col3:
+        if any(speeches):
+            if st.button(
+                "Clear all speeches",
+                key="clear_all_speeches",
+                icon=":material/delete_sweep:",
+            ):
+                st.session_state[DEBATE_SPEECHES_KEY] = [None] * NUM_SPEECHES
+                st.session_state.pop(DEBATE_AUDIO_KEY, None)
+                st.rerun()
 
     # Two columns: LLM 1 (speeches 0, 3), LLM 2 (speeches 1, 2)
     col_llm1, col_llm2 = st.columns(2)

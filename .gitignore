@@ -2,18 +2,50 @@
 .streamlit/secrets.toml
 .env
 .env.local
+.env.*.local
+*.pem
 
 # Python
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
 *.egg-info/
+.installed.cfg
+*.egg
 .venv/
 venv/
+ENV/
+
+# Testing / type check
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
 
+# OS
+.DS_Store
+Thumbs.db
+
+# Project
 PROJECT_PLAN.md
