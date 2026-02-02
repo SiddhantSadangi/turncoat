@@ -41,3 +41,7 @@ You can test the OpenRouter and ElevenLabs integrations from the app.
 3. **ElevenLabs**: Click "Fetch voices", then pick a voice and run "Generate and play" with some text.
 
 If both APIs respond, Phase 1 is done.
+
+## Phase 4 – TTS playback
+
+On the Debate page, each generated speech has a **Play** button. Click it to generate audio with ElevenLabs (using the voice chosen for that debater) and play it in the browser. Audio is cached in session; clearing all speeches also clears the audio cache.

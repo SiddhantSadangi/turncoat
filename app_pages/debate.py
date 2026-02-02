@@ -15,12 +15,13 @@ from app_pages.configure import (
     get_model_and_voice_options,
     render_config_form,
 )
-from lib import auth, debate_engine
+from lib import auth, debate_engine, elevenlabs_tts
 
 NUM_SPEECHES = debate_engine.NUM_SPEECHES
 
 INVALID_PLACEHOLDERS = ("(no models loaded)", "(no voices loaded)")
 DEBATE_SPEECHES_KEY = "debate_speeches"
+DEBATE_AUDIO_KEY = "debate_audio"  # {speech_index: bytes}
 
 # Speech order: 0 = LLM1 for, 1 = LLM2 against, 2 = LLM2 for, 3 = LLM1 against.
 # Grid: col 0 = LLM 1 (speeches 0, 3), col 1 = LLM 2 (speeches 1, 2).
@@ -40,6 +41,8 @@ def _speech_cell(
     speech: dict | None,
     can_generate: bool,
     openrouter_key: str | None,
+    elevenlabs_key: str | None,
+    voice_id: str,
     topic: str,
     llm_1: str,
     llm_2: str,
@@ -50,6 +53,27 @@ def _speech_cell(
     if speech:
         st.caption(speech.get("model_id", ""))
         st.write(speech["text"])
+        # TTS: play button or audio player
+        audio_cache = st.session_state.get(DEBATE_AUDIO_KEY) or {}
+        if speech["text"] and voice_id and voice_id not in INVALID_PLACEHOLDERS:
+            if elevenlabs_key:
+                if speech_index in audio_cache:
+                    st.audio(audio_cache[speech_index], format="audio/mpeg")
+                else:
+                    if st.button("Play", key=f"play_speech_{speech_index}"):
+                        with st.spinner("Generating audio…"):
+                            try:
+                                audio_bytes = elevenlabs_tts.text_to_speech(
+                                    elevenlabs_key, voice_id, speech["text"]
+                                )
+                                if DEBATE_AUDIO_KEY not in st.session_state:
+                                    st.session_state[DEBATE_AUDIO_KEY] = {}
+                                st.session_state[DEBATE_AUDIO_KEY][speech_index] = audio_bytes
+                                st.rerun()
+                            except Exception as e:
+                                st.error(str(e))
+            else:
+                st.caption("Set ElevenLabs API key in the sidebar to play audio.")
     else:
         st.caption("Not generated yet.")
         if openrouter_key and can_generate:
@@ -154,7 +178,7 @@ def render() -> None:
         st.session_state[DEBATE_SPEECHES_KEY] = [None] * NUM_SPEECHES
     speeches = st.session_state[DEBATE_SPEECHES_KEY]
 
-    openrouter_key, _ = auth.get_api_keys()
+    openrouter_key, elevenlabs_key = auth.get_api_keys()
     if not openrouter_key:
         st.warning("Set your OpenRouter API key in the sidebar to generate speeches.")
 
@@ -162,6 +186,7 @@ def render() -> None:
     if any(speeches):
         if st.button("Clear all speeches"):
             st.session_state[DEBATE_SPEECHES_KEY] = [None] * NUM_SPEECHES
+            st.session_state.pop(DEBATE_AUDIO_KEY, None)
             st.rerun()
 
     # Two columns: LLM 1 (speeches 0, 3), LLM 2 (speeches 1, 2)
@@ -173,12 +198,15 @@ def render() -> None:
         for speech_index, label in cells_col0:
             prev = [speeches[i] for i in range(speech_index) if speeches[i]]
             can_gen = all(speeches[i] is not None for i in range(speech_index))
+            voice_id = voice_1 if COL_FOR_INDEX[speech_index] == 0 else voice_2
             _speech_cell(
                 speech_index=speech_index,
                 label=label,
                 speech=speeches[speech_index],
                 can_generate=can_gen,
                 openrouter_key=openrouter_key,
+                elevenlabs_key=elevenlabs_key,
+                voice_id=voice_id,
                 topic=topic,
                 llm_1=llm_1,
                 llm_2=llm_2,
@@ -191,12 +219,15 @@ def render() -> None:
         for speech_index, label in cells_col1:
             prev = [speeches[i] for i in range(speech_index) if speeches[i]]
             can_gen = all(speeches[i] is not None for i in range(speech_index))
+            voice_id = voice_1 if COL_FOR_INDEX[speech_index] == 0 else voice_2
             _speech_cell(
                 speech_index=speech_index,
                 label=label,
                 speech=speeches[speech_index],
                 can_generate=can_gen,
                 openrouter_key=openrouter_key,
+                elevenlabs_key=elevenlabs_key,
+                voice_id=voice_id,
                 topic=topic,
                 llm_1=llm_1,
                 llm_2=llm_2,

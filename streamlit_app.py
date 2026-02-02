@@ -32,7 +32,7 @@ def main() -> None:
         st.subheader("Debate")
         st.slider(
             "Round duration (sec)",
-            min_value=15,
+            min_value=30,
             max_value=120,
             value=st.session_state.get(ROUND_DURATION_KEY, DEFAULT_DURATION_SEC),
             key=ROUND_DURATION_KEY,
