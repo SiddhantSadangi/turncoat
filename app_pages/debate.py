@@ -28,10 +28,10 @@ DEBATE_AUDIO_KEY = "debate_audio"  # {speech_index: bytes}
 # Speech order: 0 = LLM1 for, 1 = LLM2 against, 2 = LLM2 for, 3 = LLM1 against.
 # Grid: col 0 = LLM 1 (speeches 0, 3), col 1 = LLM 2 (speeches 1, 2).
 SPEECH_LABELS = [
-    "1 (for)",
-    "2 (against)",
-    "3 (for)",
-    "4 (against)",
+    "1. LLM 1 (for)",
+    "2. LLM 2 (against)",
+    "3. LLM 2 (for)",
+    "4. LLM 1 (against)",
 ]
 # (col, row) for each speech index: LLM1 row0, LLM2 row0, LLM2 row1, LLM1 row1
 COL_FOR_INDEX = [0, 1, 1, 0]  # speech 0,1,2,3 -> col 0,1,1,0
@@ -52,45 +52,46 @@ def _speech_cell(
     previous_speeches: list[dict],
 ) -> None:
     st.subheader(label, anchor=False)
-    has_content = speech and (speech.get("text") or "").strip()
-    if has_content:
+    if speech and speech.get("text") and speech["text"].strip():
         st.caption(speech.get("model_id", ""))
-        st.write(speech["text"])
-        # TTS: play button or audio player (disabled + popover when no ElevenLabs key)
-        audio_cache = st.session_state.get(DEBATE_AUDIO_KEY) or {}
-        if speech_index in audio_cache:
-            st.audio(audio_cache[speech_index], format="audio/mpeg")
-        elif elevenlabs_key and voice_id and voice_id not in INVALID_PLACEHOLDERS:
-            if st.button(
-                "Play",
-                key=f"play_speech_{speech_index}",
-                icon=":material/play_circle:",
-            ):
-                with st.spinner("Generating audio…"):
-                    try:
-                        audio_bytes = elevenlabs_tts.text_to_speech(
-                            elevenlabs_key, voice_id, speech["text"]
-                        )
-                        if DEBATE_AUDIO_KEY not in st.session_state:
-                            st.session_state[DEBATE_AUDIO_KEY] = {}
-                        st.session_state[DEBATE_AUDIO_KEY][speech_index] = audio_bytes
-                        st.rerun()
-                    except Exception as e:
-                        st.error(str(e))
-        else:
-            row = st.columns([3, 1])
-            with row[0]:
-                st.button(
+        # Audio above transcript
+        audio_placeholder = st.container()
+        with audio_placeholder:
+            audio_cache = st.session_state.get(DEBATE_AUDIO_KEY) or {}
+            if speech_index in audio_cache:
+                st.audio(audio_cache[speech_index], format="audio/mpeg")
+            elif elevenlabs_key and voice_id and voice_id not in INVALID_PLACEHOLDERS:
+                if st.button(
                     "Play",
                     key=f"play_speech_{speech_index}",
                     icon=":material/play_circle:",
-                    disabled=True,
-                )
-            with row[1]:
-                with st.popover(":material/info:", help="Why is Play disabled?"):
-                    st.caption(
-                        "Add your ElevenLabs API key in the sidebar to enable audio playback."
+                ):
+                    with st.spinner("Generating audio…"):
+                        try:
+                            audio_bytes = elevenlabs_tts.text_to_speech(
+                                elevenlabs_key, voice_id, speech["text"]
+                            )
+                            if DEBATE_AUDIO_KEY not in st.session_state:
+                                st.session_state[DEBATE_AUDIO_KEY] = {}
+                            st.session_state[DEBATE_AUDIO_KEY][speech_index] = audio_bytes
+                            st.rerun()
+                        except Exception as e:
+                            st.error(str(e))
+            else:
+                row = st.columns([3, 1])
+                with row[0]:
+                    st.button(
+                        "Play",
+                        key=f"play_speech_{speech_index}",
+                        icon=":material/play_circle:",
+                        disabled=True,
                     )
+                with row[1]:
+                    with st.popover(":material/info:", help="Why is Play disabled?"):
+                        st.caption(
+                            "Add your ElevenLabs API key in the sidebar to enable audio playback."
+                        )
+        st.write(speech["text"])
     else:
         if speech:
             st.caption("Previous attempt returned empty. You can retry below.")
@@ -122,7 +123,7 @@ def _speech_cell(
                         st.error(str(e))
         elif not openrouter_key:
             st.caption("Set OpenRouter API key in the sidebar.")
-        elif not can_retry:
+        else:
             st.caption("Generate the previous speech(s) first.")
 
 
@@ -200,9 +201,9 @@ def render() -> None:
 
     if invalid:
         msg = (
-            "Enter a topic above, set round duration in the sidebar, and choose two LLMs above."
-            if not need_voices
-            else "Enter a topic above, set round duration in the sidebar, and choose two LLMs and two voices above."
+            "Enter a topic above, set round duration in the sidebar, and choose two LLMs and two voices above."
+            if need_voices
+            else "Enter a topic above, set round duration in the sidebar, and choose two LLMs above."
         )
         st.info(msg)
         return
@@ -229,40 +230,39 @@ def render() -> None:
     all_have_speeches = all(speeches)
     btn_col1, btn_col2, btn_col3 = st.columns(3)
     with btn_col1:
-        if openrouter_key and not all_have_speeches:
-            if st.button(
+        if (
+            openrouter_key
+            and not all_have_speeches
+            and st.button(
                 "Generate all speeches",
                 key="gen_all_speeches",
                 icon=":material/format_quote:",
-            ):
-                progress = st.progress(0.0, text="Generating speeches…")
-                try:
-                    for i in range(NUM_SPEECHES):
-                        ss = st.session_state[DEBATE_SPEECHES_KEY]
-                        if ss[i] is not None:
-                            progress.progress(
-                                (i + 1) / NUM_SPEECHES, text=f"Speech {i + 1} (cached)"
-                            )
-                            continue
-                        prev = [ss[j] for j in range(i) if ss[j]]
-                        progress.progress(
-                            (i + 0.5) / NUM_SPEECHES, text=f"Generating speech {i + 1}…"
-                        )
-                        result = debate_engine.generate_single_speech(
-                            api_key=openrouter_key,
-                            topic=topic,
-                            speech_index=i,
-                            previous_speeches=prev,
-                            llm_1_id=llm_1,
-                            llm_2_id=llm_2,
-                            duration_sec=int(duration),
-                        )
-                        st.session_state[DEBATE_SPEECHES_KEY][i] = result
-                        progress.progress((i + 1) / NUM_SPEECHES, text=f"Speech {i + 1} done")
-                    progress.progress(1.0, text="Done")
-                    st.rerun()
-                except Exception as e:
-                    st.error(str(e))
+            )
+        ):
+            progress = st.progress(0.0, text="Generating speeches…")
+            try:
+                for i in range(NUM_SPEECHES):
+                    ss = st.session_state[DEBATE_SPEECHES_KEY]
+                    if ss[i] is not None:
+                        progress.progress((i + 1) / NUM_SPEECHES, text=f"Speech {i + 1} (cached)")
+                        continue
+                    prev = [ss[j] for j in range(i) if ss[j]]
+                    progress.progress((i + 0.5) / NUM_SPEECHES, text=f"Generating speech {i + 1}…")
+                    result = debate_engine.generate_single_speech(
+                        api_key=openrouter_key,
+                        topic=topic,
+                        speech_index=i,
+                        previous_speeches=prev,
+                        llm_1_id=llm_1,
+                        llm_2_id=llm_2,
+                        duration_sec=int(duration),
+                    )
+                    st.session_state[DEBATE_SPEECHES_KEY][i] = result
+                    progress.progress((i + 1) / NUM_SPEECHES, text=f"Speech {i + 1} done")
+                progress.progress(1.0, text="Done")
+                st.rerun()
+            except Exception as e:
+                st.error(str(e))
     with btn_col2:
         if all_have_speeches and not all_have_audio:
             if elevenlabs_key and voices_ok:
@@ -321,59 +321,37 @@ def render() -> None:
                             "Add your ElevenLabs API key in the sidebar to enable audio generation."
                         )
     with btn_col3:
-        if any(speeches):
-            if st.button(
-                "Clear all speeches",
-                key="clear_all_speeches",
-                icon=":material/delete_sweep:",
-            ):
-                st.session_state[DEBATE_SPEECHES_KEY] = [None] * NUM_SPEECHES
-                st.session_state.pop(DEBATE_AUDIO_KEY, None)
-                st.rerun()
+        if any(speeches) and st.button(
+            "Clear all speeches",
+            key="clear_all_speeches",
+            icon=":material/delete_sweep:",
+        ):
+            st.session_state[DEBATE_SPEECHES_KEY] = [None] * NUM_SPEECHES
+            st.session_state.pop(DEBATE_AUDIO_KEY, None)
+            st.rerun()
 
-    # Two columns: LLM 1 (speeches 0, 3), LLM 2 (speeches 1, 2)
-    col_llm1, col_llm2 = st.columns(2)
-    cells_col0 = [(i, SPEECH_LABELS[i]) for i in range(NUM_SPEECHES) if COL_FOR_INDEX[i] == 0]
-    cells_col1 = [(i, SPEECH_LABELS[i]) for i in range(NUM_SPEECHES) if COL_FOR_INDEX[i] == 1]
-
-    with col_llm1:
-        for speech_index, label in cells_col0:
-            prev = [speeches[i] for i in range(speech_index) if speeches[i]]
-            can_gen = all(speeches[i] is not None for i in range(speech_index))
-            voice_id = voice_1 if COL_FOR_INDEX[speech_index] == 0 else voice_2
-            _speech_cell(
-                speech_index=speech_index,
-                label=label,
-                speech=speeches[speech_index],
-                can_generate=can_gen,
-                openrouter_key=openrouter_key,
-                elevenlabs_key=elevenlabs_key,
-                voice_id=voice_id,
-                topic=topic,
-                llm_1=llm_1,
-                llm_2=llm_2,
-                duration=int(duration),
-                previous_speeches=prev,
-            )
-            st.markdown("")
-
-    with col_llm2:
-        for speech_index, label in cells_col1:
-            prev = [speeches[i] for i in range(speech_index) if speeches[i]]
-            can_gen = all(speeches[i] is not None for i in range(speech_index))
-            voice_id = voice_1 if COL_FOR_INDEX[speech_index] == 0 else voice_2
-            _speech_cell(
-                speech_index=speech_index,
-                label=label,
-                speech=speeches[speech_index],
-                can_generate=can_gen,
-                openrouter_key=openrouter_key,
-                elevenlabs_key=elevenlabs_key,
-                voice_id=voice_id,
-                topic=topic,
-                llm_1=llm_1,
-                llm_2=llm_2,
-                duration=int(duration),
-                previous_speeches=prev,
-            )
-            st.markdown("")
+    # Row-aligned grid: row 0 = speeches 0, 1; row 1 = speeches 3, 2 (LLM 1 | LLM 2)
+    rows = [(0, 1), (3, 2)]  # (speech_index_left, speech_index_right) per row
+    for speech_idx_left, speech_idx_right in rows:
+        row_col1, row_col2 = st.columns(2)
+        for col, speech_index in [(row_col1, speech_idx_left), (row_col2, speech_idx_right)]:
+            with col:
+                label = SPEECH_LABELS[speech_index]
+                prev = [speeches[i] for i in range(speech_index) if speeches[i]]
+                can_gen = all(speeches[i] is not None for i in range(speech_index))
+                voice_id = voice_1 if COL_FOR_INDEX[speech_index] == 0 else voice_2
+                _speech_cell(
+                    speech_index=speech_index,
+                    label=label,
+                    speech=speeches[speech_index],
+                    can_generate=can_gen,
+                    openrouter_key=openrouter_key,
+                    elevenlabs_key=elevenlabs_key,
+                    voice_id=voice_id,
+                    topic=topic,
+                    llm_1=llm_1,
+                    llm_2=llm_2,
+                    duration=int(duration),
+                    previous_speeches=prev,
+                )
+        st.markdown("")
