@@ -10,7 +10,7 @@ HERO_IMAGE_URL = "assets/hero.png"
 def render() -> None:
     st.title("Turncoat")
     st.subheader("Two models argue both sides of the motion.")
-    st.image(HERO_IMAGE_URL, use_container_width=True, caption="")
+    st.image(HERO_IMAGE_URL, width="stretch")
     st.markdown("")
 
     st.markdown("")
