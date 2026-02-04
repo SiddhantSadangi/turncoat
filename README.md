@@ -1,6 +1,14 @@
 # Turncoat
 
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://turncoat.streamlit.app)
+<p align="center">
+  <a href="https://turncoat.streamlit.app">
+    <img src="https://static.streamlit.io/badges/streamlit_badge_black_white.svg" alt="Open in Streamlit">
+  </a>
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/SiddhantSadangi/turncoat/main/assets/hero.png" alt="Turncoat" width="720">
+</p>
 
 **Turncoat** is an app where two AI models debate a topic—each arguing *for* and *against* the motion. Try it at **[turncoat.streamlit.app](https://turncoat.streamlit.app)** (enter your API keys in the sidebar). You pick the topic, choose the models and voices, then generate and play the four speeches.
 
