@@ -13,7 +13,7 @@ LLM_2_KEY = "llm_2_id"
 VOICE_1_KEY = "voice_1_id"
 VOICE_2_KEY = "voice_2_id"
 ROUND_DURATION_KEY = "round_duration_sec"
-DEFAULT_DURATION_SEC = 30
+DEFAULT_DURATION_SEC = 45
 
 
 def _load_models_and_voices() -> None:
